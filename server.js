@@ -32,10 +32,7 @@ function analyzeString(value) {
     value.toLowerCase() === value.toLowerCase().split("").reverse().join("");
   const unique_characters = new Set(value).size;
   const word_count = value.trim().split(/\s+/).length;
-  const sha256_hash = crypto
-    .createHash("sha256")
-    .update(value)
-    .digest("hex");
+  const sha256_hash = crypto.createHash("sha256").update(value).digest("hex");
   const character_frequency_map = {};
   for (const char of value) {
     character_frequency_map[char] =
@@ -56,10 +53,11 @@ function analyzeString(value) {
 app.post("/strings", (req, res) => {
   const { value } = req.body;
 
+  if (value === undefined) {
+    return res.status(400).json({ error: "Missing 'value' field" });
+  }
   if (typeof value !== "string") {
-    return res.status(422).json({
-      error: "Invalid data type for 'value' (must be string)",
-    });
+    return res.status(400).json({ error: "Invalid data type for 'value'" });
   }
 
   const id = crypto.createHash("sha256").update(value).digest("hex");
@@ -88,7 +86,7 @@ app.get("/strings/:string_value", (req, res) => {
     return res.status(404).json({ error: "String not found" });
   }
 
-  res.json(strings.get(hash));
+  res.status(200).json(strings.get(hash));
 });
 
 // GET /strings — Get all with filters
@@ -116,11 +114,9 @@ app.get("/strings", (req, res) => {
       (s) => s.properties.word_count === parseInt(word_count)
     );
   if (contains_character)
-    results = results.filter((s) =>
-      s.value.includes(contains_character)
-    );
+    results = results.filter((s) => s.value.includes(contains_character));
 
-  res.json({
+  res.status(200).json({
     data: results,
     count: results.length,
     filters_applied: {
@@ -133,6 +129,28 @@ app.get("/strings", (req, res) => {
   });
 });
 
+// GET /strings/filter-by-natural-language
+app.get("/strings/filter-by-natural-language", (req, res) => {
+  const { query } = req.query;
+  if (!query) {
+    return res.status(400).json({ error: "Missing 'query' parameter" });
+  }
+
+  let results = Array.from(strings.values());
+
+  if (query.includes("longer than")) {
+    const num = parseInt(query.split("longer than")[1]);
+    results = results.filter((s) => s.properties.length > num);
+  } else if (query.includes("shorter than")) {
+    const num = parseInt(query.split("shorter than")[1]);
+    results = results.filter((s) => s.properties.length < num);
+  } else if (query.includes("palindrome")) {
+    results = results.filter((s) => s.properties.is_palindrome);
+  }
+
+  return res.status(200).json({ data: results, count: results.length });
+});
+
 // DELETE /strings/:string_value — Delete string
 app.delete("/strings/:string_value", (req, res) => {
   const { string_value } = req.params;
@@ -143,7 +161,7 @@ app.delete("/strings/:string_value", (req, res) => {
   }
 
   strings.delete(hash);
-  return res.status(204).send();
+  return res.status(200).json({ message: "Deleted successfully" });
 });
 
 // Start server
